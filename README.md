@@ -5,6 +5,9 @@
 >**Warning**
 All commands and code used within this repository should be used for demo and learning pursposes only! It has some serious security shortcomings that should NOT be part of your production setup.
 
+# Design Overview
+![https://github.com/strobodov/serverless/knative_on_k8s.svg]
+
 # Sources used for this demo
 
 ## Knative
