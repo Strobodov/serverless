@@ -248,6 +248,9 @@ acr_cred=$(az acr credential show \
 
 ### Step 7: build and push container with Docker
 
+**Change Directory to `helloworld`**
+cd helloworld
+
 **Log in to Azure Container Registry from Docker**
 ```bash
 sudo docker login \
