@@ -316,11 +316,22 @@ spec:
       -  name: **<secret name>**
 ```
 
-**create Knative service for the serverless app**
+### There are now two ways to create a Knative service for the helloworld app**
+
+#### 1: use `service.yaml` template with `kubectl`**
+```bash
+kubectl apply --filename service.yaml
+```
+**get information about the service and show the URL**
+```bash
+kn service describe helloworld
+```
+
+#### 2: use `kn` to deploy the service with the CLI
+>**Note** If you want to overwrite the previous deployment of the `helloworld` service, add the `--force` flag
 ```bash
 kn service create helloworld \
 --image <registry name>.azurecr.io/<image>:<tag> \ 
 --pull-secret <secret name> \
 --env TARGET="<your (optional) text>" \
---force
 ```
