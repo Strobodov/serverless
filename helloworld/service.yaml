@@ -1,0 +1,15 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: <service name>
+  namespace: knative
+spec:
+  template:
+    spec:
+      containers:
+      - image: <registry name>.azurecr.io/<image>:<tag>
+        env:
+        - name: TARGET
+          value: "<your own text>"
+      imagePullSecrets:
+      -  name: <secret name>
