@@ -249,9 +249,13 @@ acr_cred=$(az acr credential show \
 ### Step 7: build and push container with Docker
 
 **Change Directory to `helloworld`**
+```bash
 cd helloworld
+```
 
 **Log in to Azure Container Registry from Docker**
+
+*this is needed to make use of the private container registry* 
 ```bash
 echo $acr_cred | sudo docker login \
 --username <registry name> \
