@@ -289,8 +289,9 @@ kubectl create ns <name for namespace>
 kubectl config set-context --current --namespace=<name for namespace>
 ```
 
-**edit service.yaml to make sure all values are correct**
-Make sure that, in the `service.yaml` file, the following things are correct:
+**edit service.yaml to set values**
+
+Make sure that, in the `service.yaml` file, the following things are correct and alligned with the values you've chosen during this tutorial:
 
 ```
 apiVersion: serving.knative.dev/v1
