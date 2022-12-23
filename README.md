@@ -333,5 +333,5 @@ kn service describe helloworld
 kn service create helloworld \
 --image <registry name>.azurecr.io/<image>:<tag> \ 
 --pull-secret <secret name> \
---env TARGET="<your (optional) text>" \
+--env TARGET="<your (optional) text>"
 ```
