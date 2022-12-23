@@ -262,7 +262,7 @@ sudo docker build -t <image name>:<tag> .
 **tag the image. This tag needs to contain the URL of ACR.**
 >**Note** The local image name and tag doesn't need to be the same as ACR name and tag
 ```bash
-sudo docker image tag <image name>:<tag> <registry naem>.azurecr.io/<image name>:<tag>
+sudo docker image tag <image name>:<tag> <registry name>.azurecr.io/<image name>:<tag>
 ```
 
 **push container to ACR**
@@ -270,6 +270,14 @@ sudo docker image tag <image name>:<tag> <registry naem>.azurecr.io/<image name>
 sudo docker image push <registry name>.azurecr.io/<image name>:<tag>
 ```
 ## Step 8: deploy the container on Knative
+
+**create a pull secret in Kubernetes**
+```bash
+kubectl create secret docker-registry <secret name> \ 
+--docker-server=<registry name>.azurecr.io \ 
+--docker-username=<registry name> \ 
+--docker-password=$acr_cred
+```
 
 **create a namespace for Knative**
 ```bash
