@@ -91,9 +91,9 @@ az vm list-ip-addresses \
 --output tsv
 ```
 
-copy your azure credentials to the jumpbox VM:
+copy your azure credentials and helloworld directory to the jumpbox VM:
 ```bash
-scp .az_cred  knative@<jumpbox public IP>:/home/knative
+scp -r .az_cred helloworld knative@<jumpbox public IP>:/home/knative
 ```
 connect to the jumpbox via ssh
 ```bash
@@ -235,12 +235,58 @@ az acr update \
 --output none
 ```
 
-**get registry credentials for pushing containers** 
+**get registry credentials for pushing containers and create shell variable**
 >**Warning** be carefull you don't loose these credentials
 
 ```bash
-az acr credential show \
+acr_cred=$(az acr credential show \
 --name <registry name> \
 --query passwords[0].value \
---output tsv
+--output tsv)
+```
+
+### Step 7: build and push container with Docker
+
+**Log in to Azure Container Registry from Docker**
+```bash
+sudo docker login \
+--username <registry name> \
+--password $acr_cred \
+<registry name>.azurecr.io
+```
+
+**build the container**
+```bash
+sudo docker build -t <image name>:<tag> .
+```
+**tag the image. This tag needs to contain the URL of ACR.**
+>**Note** The local image name and tag doesn't need to be the same as ACR name and tag
+```bash
+sudo docker image tag <image name>:<tag> <registry naem>.azurecr.io/<image name>:<tag>
+```
+
+**push container to ACR**
+```bash
+sudo docker image push <registry name>.azurecr.io/<image name>:<tag>
+```
+## Step 8: deploy the container on Knative
+
+**create a namespace for Knative**
+```bash
+kubectl create ns knative
+```
+
+**make namespace default for all other commands**
+```bash
+kubectl config set-context --current --namespace=knative
+```
+
+**apply service.yaml to Kubernetes**
+```bash
+kubectl apply --filename service.yaml
+```
+
+**create Knative service for the serverless app**
+```bash
+kn service create <service name> --image=<registry name>.azurecr.io/<image name>:<tag> --env TARGET="<insert your text here>"
 ```
