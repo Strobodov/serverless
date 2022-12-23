@@ -281,12 +281,33 @@ kubectl create secret docker-registry <secret name> \
 
 **create a namespace for Knative**
 ```bash
-kubectl create ns knative
+kubectl create ns <name for namespace>
 ```
 
 **make namespace default for all other commands**
 ```bash
-kubectl config set-context --current --namespace=knative
+kubectl config set-context --current --namespace=<name for namespace>
+```
+
+**edit service.yaml to make sure all values are correct**
+Make sure that, in the `service.yaml` file, the following things are correct:
+
+```
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: **<service name>**
+  namespace: **<name for namespace>**
+spec:
+  template:
+    spec:
+      containers:
+      - image: **<registry name>.azurecr.io/<image name>:<tag>**
+        env:
+        - name: TARGET
+          value: **"<your text here>"**
+      imagePullSecrets:
+      -  name: **<secret name>**
 ```
 
 **apply service.yaml to Kubernetes**
@@ -296,5 +317,5 @@ kubectl apply --filename service.yaml
 
 **create Knative service for the serverless app**
 ```bash
-kn service create <service name> --image=<registry name>.azurecr.io/<image name>:<tag> --env TARGET="<insert your text here>"
+kn service create <service name> --image=<registry name>.azurecr.io/<image name>:<tag> --env TARGET="<choose a text you like>"
 ```
