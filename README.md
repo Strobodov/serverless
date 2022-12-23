@@ -298,7 +298,7 @@ kubectl config set-context --current --namespace=<name for namespace>
 
 Make sure that, in the `service.yaml` file, the following things are correct and alligned with the values you've chosen during this tutorial:
 
-```
+```yaml
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -328,7 +328,7 @@ kn service describe helloworld
 ```
 
 #### 2: use `kn` to deploy the service with the CLI
->**Note** If you want to overwrite the previous deployment of the `helloworld` service, add the `--force` flag
+>**Note** If you want to overwrite the previous deployment of the `helloworld` service, add the `--force` flag. the `--env TARGET=""` flag is optional. When left out, the Python app will use the default as defined in the source code.
 ```bash
 kn service create helloworld \
 --image <registry name>.azurecr.io/<image>:<tag> \ 
