@@ -173,7 +173,8 @@ az aks create \
 --resource-group <rg_name> \
 --kubernetes-version <your version> \
 --node-count 1 \
---node-vm-size Standard_D2_v3
+--node-vm-size Standard_D2_v3 \
+--generate-ssh-keys
 ```
 
 **Get AKS credentials for use with `kubectl`**
