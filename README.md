@@ -253,9 +253,9 @@ cd helloworld
 
 **Log in to Azure Container Registry from Docker**
 ```bash
-sudo docker login \
+echo $acr_cred | sudo docker login \
 --username <registry name> \
---password $acr_cred \
+--password-stdin \
 <registry name>.azurecr.io
 ```
 
