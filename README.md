@@ -50,27 +50,103 @@ https://github.com/kubernetes/kubectl
 - kn cli
 - kubectl cli
 - docker (or podman)
-- creation of a file called .az_cred
+- creation of a file called `.az_cred` containing:
+  + Azure username
+  + Azure password
+  + Azure Subscription name
 
 ### (Optional) Step 1: log in to Azure and deploy jumpbox VM
 ```
 Log in to Azure to deploy a *jumbox* VM. This step is optional, you can also run all the commands on your local system 
 or in a VM you host on some platform of your own choice.
 ```
-`az login --username <username> --password <password>`
-`az group create -n <rg_name> -l <location>`
-`az vm create \
+```bash
+az login --username <username> --password <password> --output none
+```
+
+```bash
+az group create -n <rg_name> -l <location> --output none
+```
+
+```bash
+az vm create \
 --name jumpbox \
 --resource-group <rg_name> \
 --admin-user knative \
 --generate-ssh-key \
 --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
 --size Standard_B2ms \
---output none`
+--output none
+```
 
 get jumpbox VM IP address
-`az vm list-ip-addresses --resource-group <rg_name> --name jumpbox --query [].virtualMachine.network.publicIpAddresses[0].ipAddress --output tsv`
+```bash
+az vm list-ip-addresses \
+--resource-group <rg_name> \
+--name jumpbox \
+--query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
+--output tsv
+```
 
+copy your azure credentials to the jumpbox VM:
+```bash
+scp .az_cred  knative@<jumpbox public IP>:/home/knative
+```
+connect to the jumpbox via ssh
+```bash
+ssh knative@<jumpbox public IP>
+```
 
+### Step 2: install CLI tools
 
-### Step 2: 
+**kn**
+```bash
+curl https://storage.googleapis.com/knative-nightly/client/latest/kn-linux-amd64 --output kn
+```
+
+```bash
+chmod +x kn
+```
+
+```bash
+sudo mv kn /usr/local/bin
+```
+
+```bash
+kn version
+```
+
+**Azure CLI**
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+```
+
+```bash
+az --version
+```
+
+**kubectl**
+```bash
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+```
+
+```bash
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
+```bash
+kubectl version --client --output=yaml
+```
+
+**Docker**
+```bash
+sudo apt install docker.io -y
+```
+
+```bash
+docker --version
+```
+### Step 3: log in to Azure from jumpbox
+```bash
+source .az_cred
+```
