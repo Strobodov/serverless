@@ -31,6 +31,9 @@ https://github.com/knative/docs/tree/main/code-samples/serving/hello-world/hello
 https://knative.dev
 https://github.com/knative
 
+### sslip.io
+https://sslip.io/
+
 ### kn cli tool
 https://knative.dev/docs/client/install-kn/
 
@@ -149,4 +152,95 @@ docker --version
 ### Step 3: log in to Azure from jumpbox
 ```bash
 source .az_cred
+```
+```bash
+az login -u $az_username -p $az_password
+```
+**make sure you're in the right subscription**
+```bash
+az account set --subscription $Subscription
+```
+### Step 4: create single node AKS cluster
+
+**First, get actual versions available in your location**
+```bash
+az aks get-versions --location <location> --output table
+```
+**Deploy the cluster**
+```bash
+az aks create \
+--name knative \
+--resource-group <rg_name> \
+--kubernetes-version <your version> \
+--node-count 1 \
+--node-vm-size Standard_D2_v3
+```
+
+**Get AKS credentials for use with `kubectl`**
+```bash
+az aks get-credentials --resource-group <rg_name> --name knative
+```
+
+### Step 5: Deploy knative on Kubernetes
+
+**install knative serving crds and core**
+```bash
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
+```
+
+```bash
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
+```
+
+**install Kourier for networking**
+```bash
+kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml
+```
+
+**deploy Knative Serving to use Kourier by default**
+```bash
+kubectl patch configmap/config-network --namespace knative-serving --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+```
+
+**deploy Serving Default Domain for service with sslip.io**
+```bash
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-default-domain.yaml
+```
+
+### Step 6: create Azure Container Registry (ACR)
+
+**Check if name is available (name must be globally unique). This will return `true` (available) or `false` (unavailable)**
+```bash
+az acr check-name --name <registry name> --query nameAvailable --output tsv
+```
+
+**create ACR**
+```bash
+az acr create \
+--name <registry name> \
+--resource-group <rg_name> \
+--sku Standard \
+--location <location> \
+--zone-redundancy Disabled \
+--output none
+```
+
+**enable admin account**
+>**Warning** be carefull with providing admin access to the registry!
+```bash
+az acr update \
+--name <registry name> \
+--admin-enabled true \
+--anonymous-pull-enabled false \
+--output none
+```
+
+**get registry credentials for pushing containers** 
+>**Warning** be carefull you don't loose these credentials
+
+```bash
+az acr credential show \
+--name <registry name> \
+--query passwords[0].value \
+--output tsv
 ```
