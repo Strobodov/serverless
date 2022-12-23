@@ -20,7 +20,7 @@ All commands and code used within this repository should be used for demo and le
 - README.md
 - licence
 - variables: file containing all variables that are used within the Bash-scripts
-- 
+- .az_cred: contains your Azure credentials. Be very careful with this file and add it to `.gitignore`
 
 # Sources used for this demo
 
