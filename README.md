@@ -276,9 +276,10 @@ sudo docker image push <registry name>.azurecr.io/<image name>:<tag>
 ## Step 8: deploy the container on Knative
 
 **create a pull secret in Kubernetes**
+>**Note** docker-server value needs to be FQDN including https://
 ```bash
 kubectl create secret docker-registry <secret name> \ 
---docker-server=<registry name>.azurecr.io \ 
+--docker-server=https://<registry name>.azurecr.io \ 
 --docker-username=<registry name> \ 
 --docker-password=$acr_cred
 ```
@@ -315,12 +316,11 @@ spec:
       -  name: **<secret name>**
 ```
 
-**apply service.yaml to Kubernetes**
-```bash
-kubectl apply --filename service.yaml
-```
-
 **create Knative service for the serverless app**
 ```bash
-kn service create <service name> --image=<registry name>.azurecr.io/<image name>:<tag> --env TARGET="<choose a text you like>"
+kn service create helloworld \
+--image <registry name>.azurecr.io/<image>:<tag> \ 
+--pull-secret <secret name> \
+--env TARGET="<your (optional) text>" \
+--force
 ```
