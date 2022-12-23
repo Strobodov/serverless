@@ -313,7 +313,7 @@ spec:
         - name: TARGET
           value: **"<your text here>"**
       imagePullSecrets:
-      -  name: **<secret name>**
+      - name: **<secret name>**
 ```
 
 ### There are now two ways to create a Knative service for the helloworld app**
