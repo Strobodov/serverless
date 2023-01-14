@@ -15,12 +15,12 @@ All commands and code used within this repository should be used for demo and le
 <img src="https://raw.githubusercontent.com/Strobodov/serverless/main/knative_on_k8s.svg">
 
 ## Files in this repository
-- deployment.sh: a complete Bash-script that deploys all steps of this demo automatically (after taking care of some prerequisites)
-- cleanup.sh: a Bash-script that cleans up everything that's been created by the deployment script
-- README.md
+- `deployment.sh`: a complete Bash-script that deploys all steps of this demo automatically (after taking care of some prerequisites)
+- `cleanup.sh`: a Bash-script that cleans up everything that's been created by the deployment script
+- `README.md`
 - licence
 - variables: file containing all variables that are used within the Bash-scripts
-- .az_cred: contains your Azure credentials. Be very careful with this file and add it to `.gitignore`
+- `.az_cred`: contains your Azure credentials. Be very careful with this file and add it to `.gitignore`
 
 # Sources used for this demo
 
