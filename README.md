@@ -320,9 +320,9 @@ spec:
       - name: **<secret name>**
 ```
 
-### There are now two ways to create a Knative service for the helloworld app**
+### There are now two ways to create a Knative service for the helloworld app
 
-#### 1: use `service.yaml` template with `kubectl`**
+#### 1: use `service.yaml` template with `kubectl`
 ```bash
 kubectl apply --filename service.yaml
 ```
