@@ -48,11 +48,11 @@ https://github.com/kubernetes/kubectl
 
 ### Step 0: prerequisites
 - some Linux-distro running Bash (the demo uses Ubunutu 22.04 LTS)
-- an Microsoft Azure account with Contributor role on a Subription or Resource Group
-- az cli
-- kn cli
-- kubectl cli
-- docker (or podman)
+- a Microsoft Azure account with `Contributor` role on Subscription or Resource Group
+- `az` CLI tool
+- `kn` CLI tool
+- `kubectl` CLI tool
+- `docker` (or `podman`)
 - creation of a file called `.az_cred` containing:
   + Azure username
   + Azure password
