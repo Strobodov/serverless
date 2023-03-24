@@ -16,11 +16,12 @@ All commands and code used within this repository should be used for demo and le
 
 ## Files in this repository
 - `deployment.sh`: a complete Bash-script that deploys all steps of this demo automatically (after taking care of some prerequisites)
+- `functions` : the (Bash) functions used within the `deployment.sh` Bash-script
 - `cleanup.sh`: a Bash-script that cleans up everything that's been created by the deployment script
-- `README.md`
+- `README.md` : the file you're reading now
 - licence
-- variables: file containing all variables that are used within the Bash-scripts
-- `.az_cred`: contains your Azure credentials. Be very careful with this file and add it to `.gitignore`
+- `.var`: file containing all variables that are used within the Bash-scripts
+- `.azCred`: contains your Azure credentials. Be very careful with this file and add it to `.gitignore`
 
 # Sources used for this demo
 
@@ -44,38 +45,132 @@ https://github.com/Azure/azure-cli
 ### kubectl
 https://github.com/kubernetes/kubectl
 
+### variables used in .var for this demo
+- rgName = name of the Resource Group to be used in Azure
+- adminName = name of the admin account for the Jumpbox VM
+- location = Azure Region to deploy all resources to
+- appName = name to be used for the Azure Service Principal
+- clusterName = name of the AKS Cluster
+- registryName = name of the Azure Container Registry (ACR)
+- imageName = name of the container image to be used
+- imageTag = version tag for the container
+- pullSecretName = name of the Kubernetes secret to be used for pulling the container image from ACR
+- k8sNamespace = name of the Kubernetes namespace to be used by Knative
+- appMessage = message to be displayed with the Python app
+- appName= name of the Knative app to be deployed
+
+### variables used in .azCred for this demo
+- azUsername = your Azure user name
+- azPassword = your Azure password
+- azSubscription = the Azure subscription you want to uze
+
+### variables used in .spCred for this demo (create this file if you already have a Service Principal, otherwise it will be created during Step 1 of the the DEMO)
+- appID = Service Principal application ID
+- certName = name (and/or path) of the certificate to authenticate the Service Principal
+- tenantID = ID of the tenant used
+
 # How To Guide
 
 ### Step 0: prerequisites
-- some Linux-distro running Bash (the demo uses Ubunutu 22.04 LTS)
-- a Microsoft Azure account with `Contributor` role on Subscription or Resource Group
+- some Linux-distro running Bash
+- one of the following Microsoft Azure accounts:
+  + User account with `Contributor` role on Subscription or on a Resource Group
+  + `Service Principal` account with `Contributor` permissions on Subscription or on a Resource Group
 - `az` CLI tool
 - `kn` CLI tool
 - `kubectl` CLI tool
-- `docker` (or `podman`)
-- creation of a file called `.az_cred` containing:
+- `podman` (or `docker`)
+- option 1) a file called `.azCred` containing:
   + Azure username
   + Azure password
-  + Azure Subscription name
+  + Azure subscription to be used
+- option 2) a file called `.spCred` containing:
+  + Service Principal App ID
+  + Path to Service Principal certificate
+  + tenant ID of the Azure environment
 
 ### (Optional) Step 1: log in to Azure and deploy jumpbox VM
 ```
-Log in to Azure to deploy a *jumbox* VM. This step is optional, you can also run all the commands on your local system 
+Log in to Azure to deploy a jumbox VM. This step is optional, you can also run all the commands on your local system 
 or in a VM you host on some platform of your own choice.
 ```
+
+source the .azCred and .var files
 ```bash
-az login --username <username> --password <password> --output none
+source .azCred
+source .var
 ```
 
+Option 1) Log in to Azure and set the Subscription you want to use
 ```bash
-az group create -n <rg_name> -l <location> --output none
+az login \
+  --username $azUsername \
+  --password $azPassword \
+  --output none
+az account set \
+  --subscription $azSubscription
+```
+
+Option 2) create a Service Principal (or log in with it if you have one)
+```bash
+#get the subscription ID
+subscriptionID=$(az account show --query id --output tsv)
+
+#creat the service principal with scope limited to Resource Group
+az ad sp create-for-rbac \
+  --name $appName \
+  --role Contributor \
+  --scopes /subscriptions/$subscriptionID/resourceGroups/$rgName \
+  --output none
+
+#get AppID for the Service Principal
+appID=$(az ad sp list --display-name $appName --query [].appId --output tsv)
+
+printf "\rappID=\"$appID\"\n" >> .spCred
+
+#create a self-signed certificate for the Service Principal and move it to working directory
+certPath=$(az ad sp credential reset --id $appID --create-cert --query fileWithCertAndPrivateKey --output tsv)
+
+#move the certificate to the working directory
+mv $certPath .
+
+#write the certificate name into .spCred
+certName=$(echo $(ls) | grep -o 'tmp.*.pem')
+printf "\rcertName=\"$certName\"\n" >> .spCred
+
+#get the Tenant ID
+tenantID=$(az account show \
+  --query tenantId \
+  --output tsv)
+
+#write tenantID to .spCred
+printf "\rtenantID=\"$tenantID\"\n" >> .spCred
+
+#log user out
+az logout
+
+#log in with Service Principal
+az login --service-principal \
+    --username $appID \
+    --password $certName \
+    --tenant $tenantID \
+    --output none
+```
+
+### Step 2: create a Resource Group and JumpBox VM
+
+```bash
+az group create \
+  --name $rgName \
+  --location $location \
+  --output none
 ```
 
 ```bash
 az vm create \
 --name jumpbox \
---resource-group <rg_name> \
---admin-user knative \
+--resource-group $rgName \
+--admin-user $adminName \
 --generate-ssh-key \
 --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
 --size Standard_B2ms \
@@ -84,39 +179,29 @@ az vm create \
 
 get jumpbox VM IP address
 ```bash
-az vm list-ip-addresses \
---resource-group <rg_name> \
+jumpBoxIP=$(az vm list-ip-addresses \
+--resource-group $rgName \
 --name jumpbox \
 --query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
---output tsv
+--output tsv)
 ```
 
 copy your azure credentials and helloworld directory to the jumpbox VM:
 ```bash
-scp -r .az_cred helloworld knative@<jumpbox public IP>:/home/knative
+scp -r .spCred .var helloworld $adminName@$jumpBoxIP:/home/knative
 ```
-connect to the jumpbox via ssh
+connect to the jumpbox via ssh (might prompt for confirmation because of connection to new remote server)
 ```bash
-ssh knative@<jumpbox public IP>
+ssh $adminName@$jumpBoxIP
 ```
 
-### Step 2: install CLI tools
+### Step 3: install CLI tools on jumpbox
 
 **kn**
 ```bash
 curl https://storage.googleapis.com/knative-nightly/client/latest/kn-linux-amd64 --output kn
-```
-
-```bash
 chmod +x kn
-```
-
-```bash
 sudo mv kn /usr/local/bin
-```
-
-```bash
-kn version
 ```
 
 **Azure CLI**
@@ -124,54 +209,46 @@ kn version
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 ```
 
-```bash
-az --version
-```
-
 **kubectl**
 ```bash
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-```
-
-```bash
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 ```
 
+**Podman**
 ```bash
-kubectl version --client --output=yaml
+sudo apt-get -y install podman
 ```
 
-**Docker**
+### Step 4: log in to Azure from jumpbox with Service Principal
 ```bash
-sudo apt install docker.io -y
-```
-
-```bash
-docker --version
-```
-### Step 3: log in to Azure from jumpbox
-```bash
-source .az_cred
-```
-```bash
-az login -u $az_username -p $az_password
+source .spCred
+source .var
+az login --service-principal \
+  --username $appID \
+  --password $certName \
+  --tenant $tenantID \
+  --output none
 ```
 **make sure you're in the right subscription**
 ```bash
 az account set --subscription $Subscription
 ```
-### Step 4: create single node AKS cluster
+### Step 5: create single node AKS cluster
 
-**First, get actual versions available in your location**
+**First, select the latest available AKS versions available in your location**
 ```bash
-az aks get-versions --location <location> --output table
+aksVersion=$(az aks get-versions \
+  --location $location \
+  --output tsv \
+  --query 'max_by(orchestrators[], &orchestratorVersion).orchestratorVersion')
 ```
 **Deploy the cluster**
 ```bash
 az aks create \
---name knative \
---resource-group <rg_name> \
---kubernetes-version <your version> \
+--name $clusterName \
+--resource-group $rgName \
+--kubernetes-version $aksVersion \
 --node-count 1 \
 --node-vm-size Standard_D2_v3 \
 --generate-ssh-keys
@@ -179,17 +256,14 @@ az aks create \
 
 **Get AKS credentials for use with `kubectl`**
 ```bash
-az aks get-credentials --resource-group <rg_name> --name knative
+az aks get-credentials --resource-group $rgName --name $clusterName
 ```
 
-### Step 5: Deploy knative on Kubernetes
+### Step 6: Deploy knative on Kubernetes
 
 **install knative serving crds and core**
 ```bash
 kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
-```
-
-```bash
 kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
 ```
 
@@ -208,20 +282,20 @@ kubectl patch configmap/config-network --namespace knative-serving --type merge 
 kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-default-domain.yaml
 ```
 
-### Step 6: create Azure Container Registry (ACR)
+### Step 7: create Azure Container Registry (ACR)
 
 **Check if name is available (name must be globally unique). This will return `true` (available) or `false` (unavailable)**
 ```bash
-az acr check-name --name <registry name> --query nameAvailable --output tsv
+az acr check-name --name $registryName --query nameAvailable --output tsv
 ```
 
 **create ACR**
 ```bash
 az acr create \
---name <registry name> \
---resource-group <rg_name> \
+--name $registryName \
+--resource-group $rgName \
 --sku Standard \
---location <location> \
+--location $location \
 --zone-redundancy Disabled \
 --output none
 ```
@@ -230,7 +304,7 @@ az acr create \
 >**Warning** be carefull with providing admin access to the registry!
 ```bash
 az acr update \
---name <registry name> \
+--name $registryName \
 --admin-enabled true \
 --anonymous-pull-enabled false \
 --output none
@@ -240,62 +314,56 @@ az acr update \
 >**Warning** be carefull you don't loose these credentials
 
 ```bash
-acr_cred=$(az acr credential show \
---name <registry name> \
+acrCred=$(az acr credential show \
+--name $registryName \
 --query passwords[0].value \
 --output tsv)
 ```
 
-### Step 7: build and push container with Docker
+### Step 8: build and push container with Docker
 
 **Change Directory to `helloworld`**
 ```bash
 cd helloworld
 ```
 
-**Log in to Azure Container Registry from Docker**
+**If you use Docker instead of Podman, you need to log in to the Azure Container Registry**
 
 *this is needed to make use of the private container registry* 
 ```bash
-echo $acr_cred | sudo docker login \
---username <registry name> \
+echo $acrCred | sudo docker login \
+--username $registryName \
 --password-stdin \
-<registry name>.azurecr.io
+$registryName.azurecr.io
 ```
 
-**build the container**
+**build the container using the Dockerfile**
 ```bash
-sudo docker build -t <image name>:<tag> .
+podman build -t $imageName:$imageTag .
 ```
-**tag the image. This tag needs to contain the URL of ACR.**
->**Note** The local image name and tag doesn't need to be the same as ACR name and tag
-```bash
-sudo docker image tag <image name>:<tag> <registry name>.azurecr.io/<image name>:<tag>
-```
-
 **push container to ACR**
 ```bash
-sudo docker image push <registry name>.azurecr.io/<image name>:<tag>
+podman push $registryName:$acrCred $imageName:$imageTag azurecr.io/$imageName:$imageTag
 ```
-## Step 8: deploy the container on Knative
+## Step 9: deploy the container to Knative
 
 **create a pull secret in Kubernetes**
 >**Note** docker-server value needs to be FQDN including https://
 ```bash
-kubectl create secret docker-registry <secret name> \ 
---docker-server=https://<registry name>.azurecr.io \ 
---docker-username=<registry name> \ 
---docker-password=$acr_cred
+kubectl create secret docker-registry $pullSecretName \ 
+  --docker-server=https://$registryName.azurecr.io \ 
+  --docker-username=$registryName \ 
+  --docker-password=$acrCred
 ```
 
 **create a namespace for Knative**
 ```bash
-kubectl create ns <name for namespace>
+kubectl create ns $k8sNamespace
 ```
 
 **make namespace default for all other commands**
 ```bash
-kubectl config set-context --current --namespace=<name for namespace>
+kubectl config set-context --current --namespace=$k8sNameSpace
 ```
 
 **edit service.yaml to set values**
@@ -328,14 +396,14 @@ kubectl apply --filename service.yaml
 ```
 **get information about the service and show the URL**
 ```bash
-kn service describe helloworld
+kn service describe <service name>
 ```
 
 #### 2: use `kn` to deploy the service with the CLI
 >**Note** If you want to overwrite the previous deployment of the `helloworld` service, add the `--force` flag. the `--env TARGET=""` flag is optional. When left out, the Python app will use the default as defined in the source code.
 ```bash
-kn service create helloworld \
---image <registry name>.azurecr.io/<image>:<tag> \ 
---pull-secret <secret name> \
---env TARGET="<your (optional) text>"
+kn service create $appName \
+--image $registryName.azurecr.io/$imageName:$imageTag \ 
+--pull-secret $pullSecretName \
+--env TARGET="$appMessage"
 ```

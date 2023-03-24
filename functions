@@ -1,0 +1,356 @@
+#check if required files are present. 
+
+#check if .var file exists
+varFileCheck(){
+    local fileCheck=0
+
+    while [[ $fileCheck = 0 ]]
+    do
+        if [[ -f .var ]]
+        then
+            source .var
+            fileCheck=1
+        else
+            printf "\r.var is missing. Please create it.\n"
+            fileCheck=0
+            sleep 5
+        fi
+    done
+}
+
+timeStamp(){
+    date +%H:%M:%S
+}
+
+#If .spCred is available, the Service Principal account will be used. 
+#Otherwise, the User Account will be used.
+azureLogin(){
+    #check if credential file(s) are present
+    local fileCheck=0
+    
+    while [[ $fileCheck = 0 ]]
+    do
+        if [[ -f .spCred ]]
+        then
+            printf "\rtimestamp: $(date +%H:%M:%S) - logging in with Service Principal.\n"
+            source .spCred
+            loginServicePrincipal
+        else
+            if [[ -f .azCred ]]
+            then
+                printf "\rtimestamp: $(date +%H:%M:%S) - logging in as User\n"
+                source .azCred
+                loginUser
+            else
+                printf "\rERROR: no credential files found. Unable to log in.\n"
+                exit 1;
+            fi
+        fi
+    done
+}
+
+loginServicePrincipal(){ 
+    #login with service principal
+    source .spCred
+
+    az login --service-principal \
+    --username $appID \
+    --password $certName \
+    --tenant $tenantID \
+    --output none
+
+    if [[ $? -ne 0 ]]
+    then
+        printf "\rERROR: login as Service Principal failed\n"
+        exit 1;
+    else   
+        #make sure you use the right subscription
+        az account set \
+        --subscription $subscription
+    fi
+}
+
+loginUser(){
+#login to Azure using AZ CLI
+
+    az login \
+    --username $azUsername \
+    --password $azPassword \
+    --output none
+
+    if [[ $? -ne 0 ]]
+    then
+        echo "\e[31mERROR: Azure login failed\e[0m"
+        exit 1;
+    else
+    #make sure you use the right subscription
+    az account set \
+    --subscription $subscription
+    fi
+}
+
+createServicePrincipal(){
+
+#get subscription ID
+subscriptionID=$(az account show --query id --output tsv)
+
+#get tenant ID
+tenantID=$(az account show --query tenantId --output tsv)
+
+echo "tenantID=\"$tenantID\"" >> .spCred
+
+#create Service Principal with Contributor role on Resource Group scope.
+az ad sp create-for-rbac \
+--name $appName \
+--role Contributor \
+--scopes /subscriptions/$subscriptionID/resourceGroups/$rgName \
+--output none
+
+#get AppID from app_details
+appID=$(az ad sp list --display-name $appName --query [].appId --output tsv)
+
+echo "appID=\"$appID\"" >> .spCred
+
+#create a self-signed certificate for the Service Principal and move it to working directory
+certPath=$(az ad sp credential reset --id $appID --create-cert --query fileWithCertAndPrivateKey --output tsv)
+
+mv $certPath .
+
+certName=$(echo $(ls) | grep -o 'tmp.*.pem')
+
+echo "certName=\"$certName\"" >> .spCred
+}
+
+#push container to Container Registry. this is a function, because it sometimes files the first time and we can recall it easily later.
+pushContainer(){
+  for i in {0..2}
+    do
+      podman push \
+      $imageID \
+      $registryName.azurecr.io/$imageName:$imageTag \
+      --creds $registryName:$acrCred \
+      --digestfile containerDigest #writes the digest to a file
+      if [[ $? -eq 0 ]]
+      then
+        echo -e "timestamp: $(date +%H:%M:%S) - \e[34mContainer image successfully pushed to ACR\e[0m"
+        break
+      fi
+      echo "trying again..."
+  done
+}
+
+#Azure Container Registry name validation
+validateACRName(){
+    #define some variables to use during the check
+    checkAcrName=$registryName
+    local acrNameLength=${#checkAcrName}
+    local nameCheck=0
+    
+    while [[ $nameCheck = 0 ]]
+    do
+        if [[ $(echo $checkAcrName | awk -e '$1 ~ /^[a-zA-Z0-9]*$/') != "" ]] && [ $acrNameLength -gt 4 ]
+        then
+            nameCheck=1
+        else
+            echo -e "\e[31mInvalid ACR name. It may only contain alphanumerical values and must be at least 5 characters long:\e[0m"
+            read checkAcrName
+            acrNameLength=${#checkAcrName}
+        fi
+    done
+}
+
+acrNameCheck(){
+    #check name with Azure and call validateACRName function if it is not unique and/or not valid.
+    while [[ $(az acr check-name --name $checkAcrName --query nameAvailable --output tsv) != 'true' ]]
+    do
+        echo -e "\e[31mACR name already exists or still invalid. Provide another name:\e[0m"
+        read checkAcrName
+        validateACRName
+    done
+    
+    if [[ $registryName -ne $checkAcrName ]]
+    then
+        sed -i "s/$registryName/$checkAcrName" .var
+        source .var
+    fi    
+}
+
+createResourceGroup(){
+
+    #check if resource group exists
+    local checkRgName=$rgName
+    local nameCheck=0
+    while [[ $(az group exists --name $checkRgName) = 'true' ]]
+    do
+        printf "\rWarning: a resource group with this name already exists. Please provide a new name\n"
+        read $checkRgName
+    done
+
+    #if Resource Group name is available and it has changed, uptdate .var
+    if [[ $rgName -ne $checkRgName ]]
+    then
+        sed -i "/s/$rgName/$checkRgName/" .var
+    fi
+
+    #refresh .var
+    source .var
+
+    #create resource group
+    az group create \
+        --name $rgName \
+        --location $location \
+        --output none
+    
+    if [[ $? -eq 0 ]]
+    then
+        printf "\rSUCCESS: Resource Group created\n"
+    else
+        printf "\rERROR: failed to create Resource Group\n"
+        exit 1;
+    fi
+}
+
+createJumpBox(){
+    
+    az vm create \
+    --name jumpbox \
+    --resource-group $rgName \
+    --admin-user $adminName \
+    --generate-ssh-key \
+    --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
+    --size Standard_B2ms \
+    --output none
+
+    #confirm that provisioning went well
+    if [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[provisioningState]' --output tsv) -eq 'Succeeded' ]] && [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[instanceView.statuses[1].displayStatus]' --output tsv) -eq 'VM Running' ]]
+    then
+        printf "\rVM Provisioning succesfull\n"
+    else
+        printf "\rERROR: VM provisioning not successfull\n"
+        exit 1;
+    fi
+
+    #get jumpbox VM public IP address
+    jumpBoxIP=$(az vm list-ip-addresses \
+    --resource-group $rgName \
+    --name jumpbox \
+    --query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
+    --output tsv)
+}
+
+createACR(){
+    #check if Registry Name is globally unique
+    acrNameCheck
+
+    az acr create \
+        --name $registryName \
+        --resource-group $rgName \
+        --sku Standard \
+        --location $location \
+        --zone-redundancy Disabled \
+        --output none
+
+    #enable admin account
+    az acr update \
+        --name $registryName \
+        --admin-enabled true \
+        --anonymous-pull-enabled false \
+        --output none
+
+    #get registry credentials for pushing containers and create shell variable
+    acrCred=$(az acr credential show \
+        --name $registryName \
+        --query passwords[0].value \
+        --output tsv)
+}
+
+createKubernetesCluster(){
+
+    #get the latest available version in selected location
+    aksVersion=$(az aks get-versions \
+    --location $location \
+    --output tsv \
+    --query 'max_by(orchestrators[], &orchestratorVersion).orchestratorVersion')
+
+    #create a single node cluster
+    az aks create \
+        --name $clusterName \
+        --resource-group $rgName \
+        --kubernetes-version $aksVersion \
+        --node-count 1 \
+        --node-vm-size Standard_D2_v3 \
+        --generate-ssh-keys
+    
+    if [[ $? -eq 0 ]]
+    then
+        printf "\rSUCCESS: AKS cluster created.\n"
+    else
+        printf "\rERROR: creating AKS cluster failed.\n"
+        exit 1;
+    fi
+
+    #get credentials for the new cluster (will add them to kubectl config)
+    az aks get-credentials --resource-group $rgName --name $clusterName
+}
+
+deployKnative(){
+    for i in {0..2}
+    do
+        #Install the required resources for Knative Serving CRDS:
+        kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
+        if [ $? -eq 0 ];
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mKnative Serving CRDS applied\e[0m"
+            break
+        fi
+        echo "trying do deploy Knative Service CRDS again..."
+    done
+
+    for i in {0..2}
+    do
+        #Install the required resources for Knative Serving Core:
+        kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml        
+        if [ $? -eq 0 ];
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mKnative Serving Core applied\e[0m"
+            break
+        fi
+        echo "trying to deploy Knative Serving Core again..."
+    done
+
+    for i in {0..2}
+    do
+        #install the Knative Kourier controller
+        kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml        
+        if [ $? -eq 0 ];
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mKnative Kourier applied\e[0m"
+            break
+        fi
+        echo "trying to deploy Kourier again..."
+    done
+
+    for i in {0..2}
+    do
+        #configure Knative Serving to use Kourier by default 
+        kubectl patch configmap/config-network --namespace knative-serving --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'        
+        if [ $? -eq 0 ];
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mKourier configured\e[0m"
+            break
+        fi
+        echo "trying to set Kourier as default again..."
+    done
+    
+    for i in {0..2}
+    do
+        #Set a default domain for use of sslip.io
+        kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-default-domain.yaml        
+        if [ $? -eq 0 ];
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mDefault domain set for sslip.io\e[0m"
+            break
+        fi
+        echo "trying to set Default Domain again..."
+    done
+}
