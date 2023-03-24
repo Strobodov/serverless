@@ -56,9 +56,9 @@ loginServicePrincipal(){
     source .spCred
 
     az login --service-principal \
-        --username $appID \
-        --password $certName \
-        --tenant $tenantID \
+        --username "$appID" \
+        --password "$certName" \
+        --tenant "$tenantID" \
         --output none
 
     if [[ $? -ne 0 ]]
@@ -68,7 +68,7 @@ loginServicePrincipal(){
     else   
         #make sure you use the right subscription
         az account set \
-        --subscription $azSubscription
+        --subscription "$azSubscription"
     fi
 }
 
@@ -76,8 +76,8 @@ loginUser(){
 #login to Azure using AZ CLI
 
     az login \
-        --username $azUsername \
-        --password $azPassword \
+        --username "$azUsername" \
+        --password "$azPassword" \
         --output none
 
     if [[ $? -ne 0 ]]
@@ -87,7 +87,7 @@ loginUser(){
     else
         #make sure you use the right subscription
         az account set \
-            --subscription $azSubscription
+            --subscription "$azSubscription"
     fi
 }
 
@@ -103,18 +103,18 @@ createServicePrincipal(){
 
     #create Service Principal with Contributor role on Resource Group scope.
     az ad sp create-for-rbac \
-        --name $appName \
+        --name "$appName" \
         --role Contributor \
         --scopes /subscriptions/$subscriptionID/resourceGroups/$rgName \
         --output none
 
     #get AppID from app_details
-    appID=$(az ad sp list --display-name $appName --query [].appId --output tsv)
+    appID=$(az ad sp list --display-name "$appName" --query [].appId --output tsv)
 
     echo "appID=\"$appID\"" >> .spCred
 
     #create a self-signed certificate for the Service Principal and move it to working directory
-    certPath=$(az ad sp credential reset --id $appID --create-cert --query fileWithCertAndPrivateKey --output tsv)
+    certPath=$(az ad sp credential reset --id "$appID" --create-cert --query fileWithCertAndPrivateKey --output tsv)
 
     mv $certPath .
 
@@ -130,7 +130,7 @@ pushContainer(){
         podman push \
             $imageID \
             $registryName.azurecr.io/$imageName:$imageTag \
-            --creds $registryName:$acrCred \
+            --creds "$registryName:$acrCred" \
             --digestfile containerDigest #writes the digest to a file
         if [[ $? -eq 0 ]]
         then
@@ -163,7 +163,7 @@ validateACRName(){
 
 acrNameCheck(){
     #check name with Azure and call validateACRName function if it is not unique and/or not valid.
-    while [[ $(az acr check-name --name $checkAcrName --query nameAvailable --output tsv) != 'true' ]]
+    while [[ $(az acr check-name --name "$checkAcrName" --query nameAvailable --output tsv) != 'true' ]]
     do
         echo -e "\e[31mACR name already exists or still invalid. Provide another name:\e[0m"
         read checkAcrName
@@ -183,7 +183,7 @@ createResourceGroup(){
     local checkRgName=$rgName
     local nameCheck=0
     
-    while [[ $(az group exists --name $checkRgName) = 'true' ]]
+    while [[ $(az group exists --name "$checkRgName") = 'true' ]]
     do
         printf "\rWarning: a resource group with this name already exists. Please provide a new name\n"
         read $checkRgName
@@ -200,8 +200,8 @@ createResourceGroup(){
 
     #create resource group
     az group create \
-        --name $rgName \
-        --location $location \
+        --name "$rgName" \
+        --location "$location" \
         --output none
     
     if [[ $? -eq 0 ]]
@@ -217,15 +217,15 @@ createJumpBox(){
     
     az vm create \
         --name jumpbox \
-        --resource-group $rgName \
-        --admin-user $adminName \
+        --resource-group "$rgName" \
+        --admin-user "$adminName" \
         --generate-ssh-key \
         --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
         --size Standard_B2ms \
         --output none
 
     #confirm that provisioning went well
-    if [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[provisioningState]' --output tsv) -eq 'Succeeded' ]] && [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[instanceView.statuses[1].displayStatus]' --output tsv) -eq 'VM Running' ]]
+    if [[ $(az vm get-instance-view --name jumpbox --resource-group "$rgName" --query '[provisioningState]' --output tsv) -eq 'Succeeded' ]] && [[ $(az vm get-instance-view --name jumpbox --resource-group "$rgName" --query '[instanceView.statuses[1].displayStatus]' --output tsv) -eq 'VM Running' ]]
     then
         printf "\rVM Provisioning succesfull\n"
     else
@@ -235,7 +235,7 @@ createJumpBox(){
 
     #get jumpbox VM public IP address
     jumpBoxIP=$(az vm list-ip-addresses \
-        --resource-group $rgName \
+        --resource-group "$rgName" \
         --name jumpbox \
         --query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
         --output tsv)
@@ -246,23 +246,23 @@ createACR(){
     acrNameCheck
 
     az acr create \
-        --name $registryName \
-        --resource-group $rgName \
+        --name "$registryName" \
+        --resource-group "$rgName" \
         --sku Standard \
-        --location $location \
+        --location "$location" \
         --zone-redundancy Disabled \
         --output none
 
     #enable admin account
     az acr update \
-        --name $registryName \
+        --name "$registryName" \
         --admin-enabled true \
         --anonymous-pull-enabled false \
         --output none
 
     #get registry credentials for pushing containers and create shell variable
     acrCred=$(az acr credential show \
-        --name $registryName \
+        --name "$registryName" \
         --query passwords[0].value \
         --output tsv)
 }
@@ -271,15 +271,15 @@ createKubernetesCluster(){
 
     #get the latest available version in selected location
     aksVersion=$(az aks get-versions \
-        --location $location \
+        --location "$location" \
         --output tsv \
         --query 'max_by(orchestrators[], &orchestratorVersion).orchestratorVersion')
 
     #create a single node cluster
     az aks create \
-        --name $clusterName \
-        --resource-group $rgName \
-        --kubernetes-version $aksVersion \
+        --name "$clusterName" \
+        --resource-group "$rgName" \
+        --kubernetes-version "$aksVersion" \
         --node-count 1 \
         --node-vm-size Standard_D2_v3 \
         --generate-ssh-keys
@@ -293,7 +293,7 @@ createKubernetesCluster(){
     fi
 
     #get credentials for the new cluster (will add them to kubectl config)
-    az aks get-credentials --resource-group $rgName --name $clusterName
+    az aks get-credentials --resource-group "$rgName" --name "$clusterName"
 }
 
 deployKnative(){
