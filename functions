@@ -56,10 +56,10 @@ loginServicePrincipal(){
     source .spCred
 
     az login --service-principal \
-    --username $appID \
-    --password $certName \
-    --tenant $tenantID \
-    --output none
+        --username $appID \
+        --password $certName \
+        --tenant $tenantID \
+        --output none
 
     if [[ $? -ne 0 ]]
     then
@@ -76,69 +76,69 @@ loginUser(){
 #login to Azure using AZ CLI
 
     az login \
-    --username $azUsername \
-    --password $azPassword \
-    --output none
+        --username $azUsername \
+        --password $azPassword \
+        --output none
 
     if [[ $? -ne 0 ]]
     then
         echo "\e[31mERROR: Azure login failed\e[0m"
         exit 1;
     else
-    #make sure you use the right subscription
-    az account set \
-    --subscription $azSubscription
+        #make sure you use the right subscription
+        az account set \
+            --subscription $azSubscription
     fi
 }
 
 createServicePrincipal(){
 
-#get subscription ID
-subscriptionID=$(az account show --query id --output tsv)
+    #get subscription ID
+    subscriptionID=$(az account show --query id --output tsv)
 
-#get tenant ID
-tenantID=$(az account show --query tenantId --output tsv)
+    #get tenant ID
+    tenantID=$(az account show --query tenantId --output tsv)
 
-echo "tenantID=\"$tenantID\"" >> .spCred
+    echo "tenantID=\"$tenantID\"" >> .spCred
 
-#create Service Principal with Contributor role on Resource Group scope.
-az ad sp create-for-rbac \
---name $appName \
---role Contributor \
---scopes /subscriptions/$subscriptionID/resourceGroups/$rgName \
---output none
+    #create Service Principal with Contributor role on Resource Group scope.
+    az ad sp create-for-rbac \
+        --name $appName \
+        --role Contributor \
+        --scopes /subscriptions/$subscriptionID/resourceGroups/$rgName \
+        --output none
 
-#get AppID from app_details
-appID=$(az ad sp list --display-name $appName --query [].appId --output tsv)
+    #get AppID from app_details
+    appID=$(az ad sp list --display-name $appName --query [].appId --output tsv)
 
-echo "appID=\"$appID\"" >> .spCred
+    echo "appID=\"$appID\"" >> .spCred
 
-#create a self-signed certificate for the Service Principal and move it to working directory
-certPath=$(az ad sp credential reset --id $appID --create-cert --query fileWithCertAndPrivateKey --output tsv)
+    #create a self-signed certificate for the Service Principal and move it to working directory
+    certPath=$(az ad sp credential reset --id $appID --create-cert --query fileWithCertAndPrivateKey --output tsv)
 
-mv $certPath .
+    mv $certPath .
 
-certName=$(echo $(ls) | grep -o 'tmp.*.pem')
+    certName=$(echo $(ls) | grep -o 'tmp.*.pem')
 
-echo "certName=\"$certName\"" >> .spCred
+    echo "certName=\"$certName\"" >> .spCred
 }
 
 #push container to Container Registry. this is a function, because it sometimes files the first time and we can recall it easily later.
 pushContainer(){
-  for i in {0..2}
+    for i in {0..2}
     do
-      podman push \
-      $imageID \
-      $registryName.azurecr.io/$imageName:$imageTag \
-      --creds $registryName:$acrCred \
-      --digestfile containerDigest #writes the digest to a file
-      if [[ $? -eq 0 ]]
-      then
-        echo -e "timestamp: $(date +%H:%M:%S) - \e[34mContainer image successfully pushed to ACR\e[0m"
-        break
-      fi
-      echo "trying again..."
-  done
+        podman push \
+            $imageID \
+            $registryName.azurecr.io/$imageName:$imageTag \
+            --creds $registryName:$acrCred \
+            --digestfile containerDigest #writes the digest to a file
+        if [[ $? -eq 0 ]]
+        then
+            echo -e "timestamp: $(date +%H:%M:%S) - \e[34mContainer image successfully pushed to ACR\e[0m"
+            break
+        fi
+        echo "trying again..."
+    done
 }
 
 #Azure Container Registry name validation
@@ -182,6 +182,7 @@ createResourceGroup(){
     #check if resource group exists
     local checkRgName=$rgName
     local nameCheck=0
+    
     while [[ $(az group exists --name $checkRgName) = 'true' ]]
     do
         printf "\rWarning: a resource group with this name already exists. Please provide a new name\n"
@@ -215,13 +216,13 @@ createResourceGroup(){
 createJumpBox(){
     
     az vm create \
-    --name jumpbox \
-    --resource-group $rgName \
-    --admin-user $adminName \
-    --generate-ssh-key \
-    --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
-    --size Standard_B2ms \
-    --output none
+        --name jumpbox \
+        --resource-group $rgName \
+        --admin-user $adminName \
+        --generate-ssh-key \
+        --image Canonical:0001-com-ubuntu-server-jammy:22_04-lts:22.04.202204200 \
+        --size Standard_B2ms \
+        --output none
 
     #confirm that provisioning went well
     if [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[provisioningState]' --output tsv) -eq 'Succeeded' ]] && [[ $(az vm get-instance-view --name jumpbox --resource-group $rgName --query '[instanceView.statuses[1].displayStatus]' --output tsv) -eq 'VM Running' ]]
@@ -234,10 +235,10 @@ createJumpBox(){
 
     #get jumpbox VM public IP address
     jumpBoxIP=$(az vm list-ip-addresses \
-    --resource-group $rgName \
-    --name jumpbox \
-    --query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
-    --output tsv)
+        --resource-group $rgName \
+        --name jumpbox \
+        --query [].virtualMachine.network.publicIpAddresses[0].ipAddress \
+        --output tsv)
 }
 
 createACR(){
@@ -270,9 +271,9 @@ createKubernetesCluster(){
 
     #get the latest available version in selected location
     aksVersion=$(az aks get-versions \
-    --location $location \
-    --output tsv \
-    --query 'max_by(orchestrators[], &orchestratorVersion).orchestratorVersion')
+        --location $location \
+        --output tsv \
+        --query 'max_by(orchestrators[], &orchestratorVersion).orchestratorVersion')
 
     #create a single node cluster
     az aks create \
