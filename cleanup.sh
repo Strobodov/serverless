@@ -20,7 +20,7 @@ az login \
 
 #make sure you use the right subscription
 az account set \
---subscription $subscription
+--subscription $azSubscription
 
 #define name of the resource group and Azure region you want to deploy in. (see Azure documentation for current list of options)
 az group delete \
